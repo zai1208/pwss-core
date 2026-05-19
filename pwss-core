@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# pwss-core: The Binary Gate
+# Usage: cat file.asc | pwss-core <EXPECTED_FINGERPRINT>
+
+EXPECTED_FPR=$1
+# We need to buffer the stream because GPG needs to read it twice 
+# (once to verify, once to decrypt).
+RAW_DATA=$(cat)
+
+# 1. Verify and extract fingerprint from the buffered data
+ACTUAL_FPR=$(echo "$RAW_DATA" | gpg --status-fd 1 --verify - 2>&1 | grep VALIDSIG | cut -d' ' -f3)
+
+# 2. The Gatekeeper Logic
+if [ "$ACTUAL_FPR" = "$EXPECTED_FPR" ] && [ -n "$ACTUAL_FPR" ]; then
+    # Success: Decrypt the buffered data and send to stdout
+    echo "$RAW_DATA" | gpg --quiet --decrypt 2>/dev/null
+else
+    # Failure: Exit with error to stop the pipeline
+    echo "⚠️  CRITICAL: PGP fingerprint mismatch or unsigned content!" >&2
+    echo "Expected: $EXPECTED_FPR" >&2
+    echo "Received: ${ACTUAL_FPR:-NONE}" >&2
+    exit 1
+fi
